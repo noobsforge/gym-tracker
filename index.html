@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Gym Tracker</title>
+<title>Gym Tracker v1.3</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Barlow:wght@400;500;600&display=swap">
 <style>
 :root{box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);
@@ -119,21 +119,20 @@ input[type=range]{padding:0;border:0;background:none;accent-color:var(--text)}
     <div class="panel"><h3>Custom exercises</h3><div class="row" style="margin:0;justify-content:flex-start"><button id="mng">Manage custom exercises</button></div></div>
     <div class="panel"><h3>Backup</h3><p class="sm" style="margin:0 0 10px">Your logs are stored in this browser only. Export a JSON file to keep a copy, and import it to restore.</p><div class="row" style="margin:0"><button id="exp">Export JSON</button><button id="imp" class="pri">Import JSON</button></div><input type="file" id="file" accept="application/json,.json" hidden><div class="sm" id="bmsg" role="status"></div></div>
   </section>
+  <div class="sm" style="text-align:center;margin-top:24px">Gym Tracker v1.3</div>
 </main>
 
 <div class="sheet" id="sheet" hidden>
   <div class="box" role="dialog" aria-modal="true" aria-labelledby="st">
     <h2 id="st"></h2>
-    <div class="lbl">Muscles</div>
-    <div class="sm" style="margin:0 0 6px">Primary</div><div class="chips" id="maj"></div>
-    <div class="sm" style="margin:10px 0 6px">Secondary (optional)</div><div class="chips" id="min"></div>
-    <div id="pcw" hidden><input type="range" id="pc" min="10" max="90" step="5" aria-label="Primary muscle share"><div class="sm" id="pcl"></div></div>
     <div class="lbl">Exercises</div>
     <input type="search" id="q" placeholder="Search exercises…" aria-label="Search exercises">
     <div class="chips fc" id="fc"></div>
     <div id="res"></div>
     <button id="newex" class="add" type="button">+ Custom exercise</button>
     <div id="exs"></div>
+    <div class="lbl">Workout split</div>
+    <div class="leg" id="live"></div>
     <div class="lbl">Notes</div>
     <textarea id="note" rows="3" placeholder="Anything about today…" aria-label="Notes"></textarea>
     <div class="row st"><button id="clr">Clear day</button><button id="gclosed">Gym closed</button><button id="went">Went, can’t remember</button><button id="miss">Mark missed</button></div>
@@ -278,7 +277,7 @@ function render(){
       if(l&&l.went){var ws=el("span","t","Went");ws.style.setProperty("--c","#6b7684");b.appendChild(ws);}
       if(l&&l.off)b.appendChild(el("span","t miss","Missed"));
       if(l&&l.m){
-        Object.keys(l.m).sort(function(a,c){return l.m[c]-l.m[a];}).slice(0,2).forEach(function(id,j){b.appendChild(tag(id,l.m[id],j));});
+        Object.keys(l.m).sort(function(a,c){return l.m[c]-l.m[a];}).slice(0,3).forEach(function(id,j){b.appendChild(tag(id,l.m[id],j));});
       }
       var pr=l&&l.ex&&l.ex.some(function(e){return isPR(e,k);});
       if(pr||(l&&l.note))b.appendChild(el("span","mk"+(pr?" pr":""),pr?"★":"✎"));
@@ -376,15 +375,30 @@ function chips(box,sel,onPick,block,items){
     b.addEventListener("click",function(){onPick(o.id);});box.appendChild(b);
   });
 }
-function pl(){if(W.p&&W.s)$("pcl").textContent=mOf(W.p).n+" "+W.pc+"% · "+mOf(W.s).n+" "+(100-W.pc)+"%";}
+// Share of sets per muscle, in steps of 5% that always total 100.
+function split(ex){
+  var c={},tot=0,ids,r={},left=20,fr=[],i,o={};
+  ex.forEach(function(e){var n=0;e.s.forEach(function(x){if(x[0]>0)n++;});if(n){c[e.m]=(c[e.m]||0)+n;tot+=n;}});
+  ids=Object.keys(c);if(!tot)return o;
+  ids.forEach(function(id){var u=c[id]/tot*20,f=Math.floor(u);r[id]=f;left-=f;fr.push({id:id,d:u-f});});
+  fr.sort(function(x,y){return y.d-x.d;});
+  for(i=0;left>0;i=(i+1)%fr.length){r[fr[i].id]++;left--;}
+  ids.forEach(function(id){ // every trained muscle gets at least 5%
+    if(r[id]>0)return;
+    var big=ids[0];ids.forEach(function(q){if(r[q]>r[big])big=q;});
+    r[big]--;r[id]=1;
+  });
+  ids.forEach(function(id){o[id]=r[id]*5;});
+  return o;
+}
+function live(){
+  var m=split(W.ex),ids=Object.keys(m).sort(function(a,c){return m[c]-m[a];});
+  $("live").innerHTML=ids.length?ids.map(function(id){var o=mOf(id);return '<span><span class="dot" style="--c:'+o.c+'"></span><b>'+o.n+'</b> '+m[id]+'%</span>';}).join(""):'<span class="sm">Your split appears as you log sets.</span>';
+}
 function paint(){
-  chips($("maj"),W.p,function(id){W.p=W.p===id?null:id;if(!W.p||W.s===W.p)W.s=null;paint();},W.s);
-  chips($("min"),W.s,function(id){W.s=W.s===id?null:id;paint();},W.p);
   chips($("fc"),W.f,function(id){W.f=W.f===id?null:id;paint();},null);
-  var both=W.p&&W.s;$("pcw").hidden=!both;
-  if(both){$("pc").value=W.pc;pl();}
-  paintRes();
-  $("save").disabled=!(W.p||W.ex.length||$("note").value.trim());
+  paintRes();live();
+  $("save").disabled=!(W.ex.length||$("note").value.trim());
 }
 function rb(t,f){var b=el("button","rb",t);b.type="button";b.onclick=f;return b;}
 function addEx(m,n){W.ex.push({m:m,n:n.slice(0,60),s:[[0,0]]});$("q").value="";paintEx();paint();}
@@ -393,7 +407,7 @@ function paintRes(){
   if(!q&&!W.f)return;
   var L=allEx().filter(function(e){return(!W.f||e.m===W.f)&&(!q||(e.n+" "+e.sub).toLowerCase().indexOf(q)>-1);});
   L.slice(0,8).forEach(function(e){r.appendChild(rb(e.n+" · "+mOf(e.m).n+(e.sub?" / "+e.sub:"")+(e.c?" · Custom":""),function(){addEx(e.m,e.n);}));});
-  if(raw&&!L.some(function(e){return e.n.toLowerCase()===q;}))r.appendChild(rb("+ Create “"+raw+"” as a custom exercise",function(){openForm({n:raw,m:W.f||W.p,add:true});}));
+  if(raw&&!L.some(function(e){return e.n.toLowerCase()===q;}))r.appendChild(rb("+ Create “"+raw+"” as a custom exercise",function(){openForm({n:raw,m:W.f,add:true});}));
 }
 function num(s,i,ph,im,cb){
   var n=el("input");n.type="number";n.min="0";n.step=i?"0.5":"1";n.inputMode=im;n.placeholder=ph;n.setAttribute("aria-label",ph);
@@ -412,7 +426,7 @@ function paintEx(){
     h.appendChild(nm);h.appendChild(bd);h.appendChild(x);c.appendChild(h);
     var t=tOf(e);
     if(pr.ls)c.appendChild(el("div","sm","Last: "+pr.ls.map(function(s){return t==="t"?s[0]+"s":t==="w"&&s[1]?s[0]+"×"+s[1]+"kg":s[0]+" reps";}).join(", ")));
-    function upd(){bd.hidden=!(pr.b>0&&best(e)>pr.b);}
+    function upd(){bd.hidden=!(pr.b>0&&best(e)>pr.b);live();}
     e.s.forEach(function(s,j){
       var r=el("div","set"+(t==="w"?"":" one"));r.appendChild(el("span","sn",j+1));
       r.appendChild(num(s,0,t==="t"?"sec":"reps","numeric",upd));if(t==="w")r.appendChild(num(s,1,"kg","decimal",upd));
@@ -426,8 +440,8 @@ function paintEx(){
 }
 function openSheet(k){
   editKey=k;
-  var l=logs[k]||{},ids=Object.keys(l.m||{}).sort(function(a,b){return l.m[b]-l.m[a];});
-  W={p:ids[0]||null,s:ids[1]||null,pc:ids[1]?Math.min(90,Math.max(10,l.m[ids[0]])):70,f:null,ex:JSON.parse(JSON.stringify(l.ex||[]))};
+  var l=logs[k]||{};
+  W={f:null,ex:JSON.parse(JSON.stringify(l.ex||[]))};
   $("note").value=l.note||"";$("q").value="";
   $("st").textContent=dk(k).toLocaleDateString(undefined,{weekday:"long",month:"long",day:"numeric"});
   paintEx();paint();$("sheet").hidden=false;
@@ -438,18 +452,10 @@ $("sheet").addEventListener("click",function(e){if(e.target===this)close();});
 ["msheet","csheet"].forEach(function(id){$(id).addEventListener("click",function(e){if(e.target===this)this.hidden=true;});});
 document.addEventListener("keydown",function(e){if(e.key!=="Escape")return;if(!$("csheet").hidden)$("csheet").hidden=true;else if(!$("msheet").hidden)$("msheet").hidden=true;else close();});
 $("q").oninput=paintRes;
-$("note").oninput=function(){$("save").disabled=!(W.p||W.ex.length||this.value.trim());};
-$("pc").oninput=function(){W.pc=+this.value;pl();};
+$("note").oninput=function(){$("save").disabled=!(W.ex.length||this.value.trim());};
 $("save").onclick=function(){
-  var m={};
-  if(W.p){if(W.s){m[W.p]=W.pc;m[W.s]=100-W.pc;}else m[W.p]=100;}
-  else{ // no muscles picked: work them out from the logged sets
-    var c={};
-    W.ex.forEach(function(e){e.s.forEach(function(x){if(x[0]>0)c[e.m]=(c[e.m]||0)+1;});});
-    var t=Object.keys(c).sort(function(a,b){return c[b]-c[a];}).slice(0,2);
-    if(t.length===1)m[t[0]]=100;
-    else if(t.length===2){var a=Math.min(90,Math.max(10,Math.round(c[t[0]]/(c[t[0]]+c[t[1]])*100)));m[t[0]]=a;m[t[1]]=100-a;}
-  }
+  var m=split(W.ex),old=logs[editKey];
+  if(!Object.keys(m).length&&!W.ex.length&&old&&old.m)m=old.m; // note-only edit keeps an older day's split
   var l=norm({m:m,ex:W.ex,note:$("note").value});
   if(l)logs[editKey]=l;else delete logs[editKey];
   persist();close();render();
@@ -479,12 +485,16 @@ function fpaint(){
   chips($("ctp"),F.t,function(id){F.t=id;fpaint();},null,TYPES);
 }
 function renameEx(o,r){
-  Object.keys(logs).forEach(function(k){(logs[k].ex||[]).forEach(function(e){if(e.m===o.m&&e.n===o.n){e.m=r.m;e.n=r.n;}});});
+  Object.keys(logs).forEach(function(k){
+    var hit=false;
+    (logs[k].ex||[]).forEach(function(e){if(e.m===o.m&&e.n===o.n){e.m=r.m;e.n=r.n;hit=true;}});
+    if(hit&&o.m!==r.m){var m=split(logs[k].ex);if(Object.keys(m).length)logs[k].m=m;}
+  });
   persist();
 }
 $("cn").oninput=function(){F.near=false;$("cmsg").textContent="";};
 $("ccancel").onclick=function(){$("csheet").hidden=true;};
-$("newex").onclick=function(){openForm({m:W.f||W.p,add:true});};
+$("newex").onclick=function(){openForm({m:W.f,add:true});};
 $("cok").onclick=function(){
   var n=$("cn").value.replace(/\s+/g," ").trim(),msg=$("cmsg");
   if(!n){msg.textContent="Give the exercise a name.";return;}
