@@ -93,6 +93,9 @@ input[type=range]{padding:0;border:0;background:none;accent-color:var(--text)}
 .grow input{padding:5px 8px}.grow .track i{background:var(--text)}
 #gt{margin-bottom:6px}
 .set.one{grid-template-columns:22px 1fr 32px}
+.set.dr{margin-left:28px;grid-template-columns:18px 1fr 1fr 32px;border-left:2px solid var(--line);padding-left:6px}
+.set.dr.one{grid-template-columns:18px 1fr 32px}
+.add.dbtn{margin-left:28px;color:var(--muted)}
 .sheet.top{z-index:30}
 .lbl .sm{display:inline;font-weight:400;margin:0 0 0 6px}
 .mact{display:flex;gap:6px}.mact .add{margin:0}
@@ -231,7 +234,12 @@ function norm(l){
     l.ex.forEach(function(e){
       if(!e||!e.m||!mOf(conv(e.m))||typeof e.n!=="string"||!e.n||!Array.isArray(e.s))return;
       var s=[];
-      e.s.forEach(function(x){var r=+(x&&x[0]),w=+(x&&x[1]),f=(+(x&&x[2])||0)&15,t=[Math.round(r),w>0?Math.round(w*100)/100:0];if(f)t.push(f);if(r>0)s.push(t);});
+      e.s.forEach(function(x){
+        var r=+(x&&x[0]),w=+(x&&x[1]),f=(+(x&&x[2])||0)&15,t=[Math.round(r),w>0?Math.round(w*100)/100:0],dr=[];
+        (Array.isArray(x&&x[3])?x[3]:[]).forEach(function(q){var r2=+(q&&q[0]),w2=+(q&&q[1]);if(r2>0)dr.push([Math.round(r2),w2>0?Math.round(w2*100)/100:0]);});
+        if(f||dr.length)t.push(f);if(dr.length)t.push(dr.slice(0,10));
+        if(r>0)s.push(t);
+      });
       if(s.length)ex.push({m:conv(e.m),n:e.n.slice(0,60),s:s});
     });
     if(ex.length)o.ex=ex;
@@ -456,7 +464,8 @@ function paintEx(){
     x.onclick=function(){W.ex.splice(i,1);paintEx();paint();};
     h.appendChild(nm);h.appendChild(bd);h.appendChild(x);c.appendChild(h);
     var t=tOf(e);
-    if(pr.ls)c.appendChild(el("div","sm","Last: "+pr.ls.map(function(s){return t==="t"?s[0]+"s":t==="w"&&s[1]?s[0]+"×"+s[1]+"kg":s[0]+" reps";}).join(", ")));
+    function fm(s){return t==="t"?s[0]+"s":t==="w"&&s[1]?s[0]+"×"+s[1]+"kg":s[0]+" reps";}
+    if(pr.ls)c.appendChild(el("div","sm","Last: "+pr.ls.map(function(s){return fm(s)+(s[3]||[]).map(function(d){return " ↓ "+fm(d);}).join("");}).join(", ")));
     function upd(){bd.hidden=!(pr.b>0&&best(e)>pr.b);live();}
     e.s.forEach(function(s,j){
       var r=el("div","set"+(t==="w"?"":" one"));r.appendChild(el("span","sn",j+1));
@@ -472,6 +481,15 @@ function paintEx(){
         tg.appendChild(tb);
       });
       c.appendChild(tg);
+      (s[3]||[]).forEach(function(dp,q){ // a drop branches off its set and is not counted as a set
+        var dr=el("div","set dr"+(t==="w"?"":" one"));dr.appendChild(el("span","sn","↳"));
+        dr.appendChild(num(dp,0,t==="t"?"sec":"reps","numeric",upd));if(t==="w")dr.appendChild(num(dp,1,"kg","decimal",upd));
+        var dx=el("button","x","×");dx.type="button";dx.setAttribute("aria-label","Remove drop");
+        dx.onclick=function(){s[3].splice(q,1);paintEx();};dr.appendChild(dx);c.appendChild(dr);
+      });
+      var db=el("button","add dbtn","+ Drop");db.type="button";
+      db.onclick=function(){s[2]=s[2]||0;(s[3]=s[3]||[]).push([0,0]);paintEx();};
+      c.appendChild(db);
     });
     var a=el("button","add","+ Set");a.type="button";
     a.onclick=function(){var l=e.s[e.s.length-1];e.s.push(l?[l[0],l[1]]:[0,0]);paintEx();};
